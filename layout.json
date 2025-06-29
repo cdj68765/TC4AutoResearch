@@ -1,0 +1,13 @@
+{
+  "ideaDirPath": "C:/Users/cdj68/Desktop/TC4AutoResearch/.idea",
+  "modulesMap": {
+    "TC4AutoResearch": "C:/Users/cdj68/Desktop/TC4AutoResearch/.idea/TC4AutoResearch.iml",
+    "TC4AutoResearch:api": "C:/Users/cdj68/Desktop/TC4AutoResearch/.idea/modules/TC4AutoResearch.api.iml",
+    "TC4AutoResearch:ideVirtualMain": "C:/Users/cdj68/Desktop/TC4AutoResearch/.idea/modules/TC4AutoResearch.ideVirtualMain.iml",
+    "TC4AutoResearch:injectedTags": "C:/Users/cdj68/Desktop/TC4AutoResearch/.idea/modules/TC4AutoResearch.injectedTags.iml",
+    "TC4AutoResearch:main": "C:/Users/cdj68/Desktop/TC4AutoResearch/.idea/modules/TC4AutoResearch.main.iml",
+    "TC4AutoResearch:mcLauncher": "C:/Users/cdj68/Desktop/TC4AutoResearch/.idea/modules/TC4AutoResearch.mcLauncher.iml",
+    "TC4AutoResearch:patchedMc": "C:/Users/cdj68/Desktop/TC4AutoResearch/.idea/modules/TC4AutoResearch.patchedMc.iml",
+    "TC4AutoResearch:test": "C:/Users/cdj68/Desktop/TC4AutoResearch/.idea/modules/TC4AutoResearch.test.iml"
+  }
+}

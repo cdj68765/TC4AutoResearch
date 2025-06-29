@@ -46,4 +46,8 @@
 
 最后的最后，祝大家玩的愉快，如果Mod使用上有任何问题，或者想添加新功能，请在Issue中提出
 
-补充一个方便下载的地址吧[https://wwck.lanzoub.com/iNraM2zul5hg](https://wwck.lanzoub.com/iNraM2zul5hg)
+无法解锁笔记案例
+<p align="head">
+  <img src="image/image6.png" width="250">
+</p>
+笔记来自于 [神秘基础学] 模组 [左轮枪升级:始源] 研究，遇到这种笔记，还是直接放弃吧

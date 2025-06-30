@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -52,6 +53,31 @@ namespace AutoResearch
         public override string ToString()
         {
             return $"{q}:{r}";
+        }
+
+        // 修正后的笛卡尔坐标转换
+        public (double x, double y) ToCartesian()
+        {
+            // 正确的轴向到笛卡尔坐标转换
+            double x = Math.Sqrt(3) * q + Math.Sqrt(3) / 2 * r;
+            double y = 0.0 * q + 3.0 / 2 * r;
+            return (x, y);
+        }
+
+        // 计算角度（0-360度）
+        public double Angle()
+        {
+            var (x, y) = ToCartesian();
+            double angle = Math.Atan2(y, x) * (180 / Math.PI);
+            return angle < 0 ? angle + 360 : angle;
+        }
+
+        public double ClockwiseAngle()
+        {
+            var (x, y) = ToCartesian();
+            // Atan2返回的是逆时针角度，我们转换为顺时针
+            double angle = -Math.Atan2(y, x) * (180 / Math.PI);
+            return angle < 0 ? angle + 360 : angle;
         }
 
         internal IEnumerable<Hex> GetNeighbors()
@@ -156,8 +182,295 @@ namespace AutoResearch
                 var token = cts.Token;
 
                 object solvesLock = new object();
-                bool timerStarted = false;
 
+                while (true)
+                {
+                    Hex center = new Hex(0, 0);
+
+                    // 按角度排序所有点
+                    var sortedPoints = TargeItem.OrderBy(h => h.Key.Angle()).ToList();
+
+                    // 我们需要找到最接近45°, 135°, 225°, 315°的点
+                    var targetAngles = new double[] { 60, 250 };
+                    Dictionary<Hex, string> result = new();
+
+                    foreach (var targetAngle in targetAngles)
+                    {
+                        // 找到最接近目标角度的点
+                        var closest = sortedPoints.OrderBy(h => Math.Abs(h.Key.Angle() - targetAngle)).First();
+                        result.Add(closest.Key, closest.Value);
+                    }
+
+                    List<Hex> GetHexRing(Hex center, int radius)
+                    {
+                        var results = new List<Hex>();
+
+                        if (radius == 0)
+                        {
+                            results.Add(center);
+                            return results;
+                        }
+
+                        // 六个方向（顺时针）
+                        var directions = new (int dq, int dr)[] { (1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1) };
+                        // 从第一个方向的起点出发
+                        int q = center.q + directions[4].dq * radius;
+                        int r = center.r + directions[4].dr * radius;
+                        Hex hex = new Hex(q, r);
+
+                        for (int i = 0; i < 6; i++)
+                        {
+                            for (int step = 0; step < radius; step++)
+                            {
+                                results.Add(hex);
+                                q += directions[i].dq;
+                                r += directions[i].dr;
+                                hex = new Hex(q, r);
+                            }
+                        }
+
+                        return results;
+                    }
+                    TargeItem = TargeItem.OrderBy(kvp => kvp.Key.ClockwiseAngle()).ToDictionary();
+
+                    var topHex = result.First();
+                    var bottomHex = result.Last();
+                    var ShortestPathRoot = FindShortestPathToChain(topHex.Key, [bottomHex.Key], Hexes);
+                    var TryPathAspect = new Dictionary<Hex, List<string>>();
+                    foreach (var item in ShortestPathRoot)
+                    {
+                        TryPathAspect.Add(item, []);
+                    }
+                    TryPathAspect[topHex.Key].Add(topHex.Value);
+                    TryPathAspect[bottomHex.Key].Add(bottomHex.Value);
+
+                    Dictionary<Hex, string>? SolverM = GetPossibleSolve(GetPossibleMoves(TryPathAspect, new Dictionary<Hex, string>(), 0).ToArray());
+                    if (SolverM.Count == 0)
+                    {
+                        var linksecond = GetHexRing(center, 2);
+                        var set = new HashSet<Hex>(linksecond);
+                        var Check = TargeItem.Keys.All(x => set.Contains(x));
+                        if (TargeItem.Keys.All(set.Contains))
+                        {
+                            var linkfirst = GetHexRing(center, 1);
+                            Dictionary<(Hex, Hex), Dictionary<Hex, string>[]> _SolverS = new();
+                            Dictionary<Hex, List<string>> TrySolvers = new();
+
+                            for (int j = 0; j < TargeItem.Count; j++)
+                            {
+                                KeyValuePair<Hex, string> CurrectItem = TargeItem.ElementAt(j);
+                                var Neighbor = linkfirst.OrderBy(x => x.Distance(CurrectItem.Key)).Intersect(Hexes).ToArray();
+                                foreach (var item in Neighbor)
+                                {
+                                    if (TrySolvers.ContainsKey(item))
+                                    {
+                                        continue;
+                                    }
+                                    TrySolvers.Add(item, AspectMap[CurrectItem.Value]);
+                                    break;
+                                }
+                            }
+                            var GetAllCombinations = GetPossibleMoves2(TrySolvers, new Dictionary<Hex, string>(), new Dictionary<Hex, Hex>(), 0).OrderBy(x => x.Fail.Count).First();
+
+                            if (GetAllCombinations.Fail.Count == 2)
+                            {
+                                var item = GetAllCombinations.Fail.First();
+                                var CFirst = item.Key;
+                                var CLast = item.Value;
+                                var CFirstAspect = AspectMap[GetAllCombinations.Sucess[CFirst]];
+                                var CLastAspect = AspectMap[GetAllCombinations.Sucess[CLast]];
+                                var CIntersect = CFirstAspect.Intersect(CLastAspect).ToList();
+                                if (CIntersect.Count == 0)
+                                {
+                                    var CFirstlinksecond = CFirst.GetNeighbors().Intersect(linkfirst).Except([CLast]).FirstOrDefault();
+                                    if (CFirstlinksecond != null)
+                                    {
+                                        CFirst = CFirstlinksecond;
+                                        CFirstAspect = AspectMap[GetAllCombinations.Sucess[CFirst]];
+                                        CIntersect = CFirstAspect.Intersect(CLastAspect).ToList();
+                                        if (CIntersect.Count != 0)
+                                        {
+                                            GetAllCombinations.Sucess.Add(center, CIntersect.First());
+                                        }
+                                    }
+                                }
+                            }
+
+                            for (int j = 0, m = 1; j < TargeItem.Count; j++, m++)
+                            {
+                                if (m == TargeItem.Count) m = 0;
+                                {
+                                    var First = TargeItem.ElementAt(j);
+                                    var Last = TargeItem.ElementAt(m);
+                                    var FirstIndex = linksecond.IndexOf(First.Key);
+                                    if (FirstIndex == -1) continue;
+                                    var LastIndex = linksecond.IndexOf(Last.Key);
+                                    if (LastIndex == -1) continue;
+                                    var _TryPathAspect = new Dictionary<Hex, List<string>>();
+                                    var Currect = FirstIndex;
+                                    var LinkCheck = true;
+                                    do
+                                    {
+                                        try
+                                        {
+                                            if (Currect == FirstIndex)
+                                            {
+                                                _TryPathAspect.Add(First.Key, [First.Value]);
+                                                continue;
+                                            }
+                                            else if (Currect == LastIndex)
+                                            {
+                                                _TryPathAspect.Add(Last.Key, [Last.Value]);
+                                                break;
+                                            }
+                                            var CurrectPoint = linksecond[Currect];
+                                            if (Hexes.Contains(CurrectPoint))
+                                            {
+                                                _TryPathAspect.Add(CurrectPoint, []);
+                                            }
+                                            else
+                                            {
+                                                LinkCheck = false;
+                                                break;
+                                            }
+                                        }
+                                        catch (Exception)
+                                        {
+                                        }
+                                        finally
+                                        {
+                                            Currect += 1;
+                                            if (Currect == linksecond.Count)
+                                                Currect = 0;
+                                        }
+                                    } while (true);
+                                    if (LinkCheck)
+                                    {
+                                        var _Solver = GetPossibleMoves(_TryPathAspect, new Dictionary<Hex, string>(), 0).ToArray();
+                                        if (_Solver.Length == 0)
+                                        {
+                                            var FirstPointNeighbor = _TryPathAspect.First().Key.GetNeighbors().ToArray();
+                                            var SecondPointNeighbor = _TryPathAspect.Last().Key.GetNeighbors().ToArray();
+                                            var GetCrossPoint = FirstPointNeighbor.Intersect(SecondPointNeighbor).Except(linkfirst).ToArray();
+                                            if (GetCrossPoint.Length != 0)
+                                            {
+                                                foreach (var CrossPoint in GetCrossPoint)
+                                                {
+                                                    if (Hexes.Contains(CrossPoint))
+                                                    {
+                                                        _TryPathAspect = new Dictionary<Hex, List<string>>()
+                                                    {
+                                                        { First.Key,[First.Value]},
+                                                        { CrossPoint,[]},
+                                                        { Last.Key,[Last.Value]},
+                                                    };
+                                                        _Solver = GetPossibleMoves(_TryPathAspect, new Dictionary<Hex, string>(), 0).ToArray();
+                                                        _SolverS.Add((First.Key, Last.Key), _Solver);
+                                                    }
+                                                }
+                                            }
+                                            else
+                                            {
+                                                var SubFirstPoint = FirstPointNeighbor.Intersect(linkfirst).Intersect(Hexes).FirstOrDefault();
+                                                var SubSecondPoint = SecondPointNeighbor.Intersect(linkfirst).Intersect(Hexes).FirstOrDefault();
+                                                if (SubFirstPoint != null && SubSecondPoint != null)
+                                                {
+                                                    _TryPathAspect = new Dictionary<Hex, List<string>>()
+                                                    {
+                                                        { First.Key,[First.Value]},
+                                                        { SubFirstPoint,[]},
+                                                        { SubSecondPoint,[]},
+                                                        { Last.Key,[Last.Value]},
+                                                    };
+                                                    _Solver = GetPossibleMoves(_TryPathAspect, new Dictionary<Hex, string>(), 0).ToArray();
+                                                    _SolverS.Add((First.Key, Last.Key), _Solver);
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            _SolverS.Add((First.Key, Last.Key), _Solver);
+                                        }
+                                    }
+                                }
+                            }
+
+                            foreach (var item in _SolverS)
+                            {
+                                if (item.Value.Length != 0)
+                                {
+                                    foreach (var item2 in item.Value.First())
+                                    {
+                                        if (TargeItem.ContainsKey(item2.Key)) continue;
+                                        if (!SolverM.ContainsKey(item2.Key))
+                                        {
+                                            SolverM.Add(item2.Key, item2.Value);
+                                        }
+                                    }
+                                }
+                            }
+                            foreach (var item in GetAllCombinations.Sucess)
+                            {
+                                if (TargeItem.ContainsKey(item.Key)) continue;
+                                if (!SolverM.ContainsKey(item.Key))
+                                {
+                                    SolverM.Add(item.Key, item.Value);
+                                }
+                            }
+                            //最终连线确认以及连接//首先确认所有Target是否都能跑通
+
+                            foreach (var item in TargeItem)
+                            {
+                                var TargeNei = item.Key.GetNeighbors();
+                                var TargeAspect = AspectMap[item.Value];
+                                var FindCheck = false;
+                                foreach (var TargeNeiIntersect in TargeNei.Intersect(SolverM.Keys).ToList())
+                                {
+                                    if (TargeAspect.Contains(SolverM[TargeNeiIntersect]))
+                                    {
+                                        FindCheck = true;
+                                        break;
+                                    }
+                                }
+                                if (!FindCheck)
+                                {
+                                    //找寻四周是否有空白点
+                                    var SpacePoints = Hexes.Except(SolverM.Keys).Except(TargeItem.Keys).Intersect(TargeNei).ToArray().FirstOrDefault();
+                                    if (SpacePoints != null)
+                                    {
+                                        //确认这个点附近的所有点
+                                        var SpacePointsNeighbors = SpacePoints.GetNeighbors().Intersect(SolverM.Keys).ToArray();
+                                        foreach (var item2 in SpacePointsNeighbors)//获得这两个点中的一个，是否与该点有交集
+                                        {
+                                            var AspectMapTarge = AspectMap[SolverM[item2]].Intersect(TargeAspect).ToArray();
+                                            if (AspectMapTarge.Length != 0)
+                                            {
+                                                SolverM.Add(SpacePoints, AspectMapTarge.First());
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (SolverM.Count != 0)
+                    {
+                        StringBuilder RetString = new StringBuilder();
+                        foreach (var item in SolverM)
+                        {
+                            RetString.Append(item.Key.q);
+                            RetString.Append(":");
+                            RetString.Append(item.Key.r);
+                            RetString.Append("|");
+                            RetString.Append(item.Value);
+                            RetString.Append("&");
+                        }
+                        Console.WriteLine(RetString.ToString());
+                    }
+
+                    break;
+                }
                 var T1 = Task.Run(() =>
                 {
                     while (!token.IsCancellationRequested)
@@ -221,8 +534,8 @@ namespace AutoResearch
                 {
                     while (!token.IsCancellationRequested)
                     {
-                        var WaitDelPoint = new List<Hex>();
-                        var Solvess = new List<Dictionary<Hex, string>>();
+                        //var WaitDelPoint = new List<Hex>();
+                        //var Solvess = new List<Dictionary<Hex, string>>();
                         var center = new Hex(0, 0);
                         var sortedTargeItem = TargeItem.OrderBy(kv =>
                         {
@@ -235,9 +548,10 @@ namespace AutoResearch
                             double angle = Math.Atan2(y, x); // 范围 [-π, π]
                             return (angle + 2 * Math.PI) % (2 * Math.PI); // 转为正角度 [0, 2π)
                         }).ToList();
+                        Dictionary<Hex, Dictionary<Hex, string>[]> HexSolves = new();
                         for (int i = 0, j = 1; i < sortedTargeItem.Count; i++, j++)
                         {
-                            if (j == sortedTargeItem.Count - 1 && Solvess.Count == sortedTargeItem.Count - 1)
+                            if (j == sortedTargeItem.Count - 1 && HexSolves.Count == sortedTargeItem.Count - 1)
                             {
                                 break;
                             }
@@ -307,20 +621,28 @@ namespace AutoResearch
                             }
                             else
                             {
-                                foreach (var item in SubPossible.First())
+                                //foreach (var item in SubPossible.First())
+                                //{
+                                //    WaitDelPoint.Add(item.Key);
+                                //}
+                                //Solvess.Add(SubPossible.First());
+                                if (HexSolves.ContainsKey(First.Key))
                                 {
-                                    WaitDelPoint.Add(item.Key);
+                                    HexSolves[First.Key] = SubPossible;
                                 }
-                                Solvess.Add(SubPossible.First());
+                                else
+                                {
+                                    HexSolves.Add(First.Key, SubPossible);
+                                }
                             }
                         }
-                        if (Solvess.Count > sortedTargeItem.Count - 1)
+                        if (HexSolves.Count >= sortedTargeItem.Count - 1)
                         {
                             Dictionary<Hex, string> Solver = new();
-
-                            foreach (var item in Solvess)
+                            var All = GetSolvesMoves(HexSolves, new Dictionary<Hex, string>(), 0).ToArray();
+                            foreach (var Solvess in GetSolvesMoves(HexSolves, new Dictionary<Hex, string>(), 0))
                             {
-                                foreach (var item2 in item)
+                                foreach (var item2 in Solvess)
                                 {
                                     if (TargeItem.ContainsKey(item2.Key)) continue;
 
@@ -334,10 +656,30 @@ namespace AutoResearch
                                         Solver.Add(item2.Key, item2.Value);
                                     }
                                 }
+                                break;
+                            End: continue;
                             }
-                            Solves.Add(Solver);
+
+                            //foreach (var item in Solvess)
+                            //{
+                            //    foreach (var item2 in item)
+                            //    {
+                            //        if (TargeItem.ContainsKey(item2.Key)) continue;
+
+                            //        if (Solver.ContainsKey(item2.Key) && Solver[item2.Key] != item2.Value)
+                            //        {
+                            //            Solver.Clear();
+                            //            goto End;
+                            //        }
+                            //        else if (!Solver.ContainsKey(item2.Key))
+                            //        {
+                            //            Solver.Add(item2.Key, item2.Value);
+                            //        }
+                            //    }
+                            //}
+                            if (Solver.Count != 0)
+                                Solves.Add(Solver);
                         }
-                    End:
                         cts.Cancel();
                         break;
                     }
@@ -370,7 +712,7 @@ namespace AutoResearch
                         goto Retry;
                     }
                 }
-
+                #region
                 //var Pair = TargeItem
                 //    .Select((item, i) => (
                 //    A: item,
@@ -529,6 +871,7 @@ namespace AutoResearch
                 // if (Solver.ContainsKey(item2.Key) && Solver[item2.Key] != item2.Value) {
                 // Solver.Clear(); goto End; } else if (!Solver.ContainsKey(item2.Key)) {
                 // Solver.Add(item2.Key, item2.Value); } } } }
+                #endregion
                 if (Solver.Count != 0)
                 {
                     StringBuilder RetString = new StringBuilder();
@@ -557,13 +900,18 @@ namespace AutoResearch
 
         private static Dictionary<Hex, string> GetPossibleSolve(Dictionary<Hex, string>[] OriSolver)
         {
-            var Success = new List<(Dictionary<Hex, string>, Dictionary<string, int>)>();
-            var Fail = new List<(Dictionary<Hex, string>, Dictionary<string, int>)>();
+            //var Success = new List<(Dictionary<Hex, string>, Dictionary<string, int>)>();
+            //var Fail = new List<(Dictionary<Hex, string>, Dictionary<string, int>)>();
+            //var AllTry = new List<(List<Dictionary<Hex, string>> Success, List<Dictionary<Hex, List<string>>> Fail)>();
             foreach (var item in OriSolver)
             {
                 List<((string, string), Dictionary<Hex, string>)> TempWannaPath = new();
                 var First = item.First();
                 var Second = item.Last();
+
+                var Success = new Dictionary<Hex, string>();
+                var Fail = new List<Dictionary<Hex, List<string>>>();
+
                 for (int m = 0; m < TargeItem.Count; m++)
                 {
                     var CurrectTag = TargeItem.ElementAt(m);
@@ -585,10 +933,87 @@ namespace AutoResearch
                     var GetSolve = GetPossibleMoves(TryPathAspect, new Dictionary<Hex, string>(), 0).ToArray();
                     if (GetSolve.Length == 0)
                     {
-                        goto End;
+                        Fail.Add(TryPathAspect);
+                        continue;
+                        //goto End;
                     }
-                    TempWannaPath.Add(((CurrectTag.Key.ToString(), ShortestPath.Last().ToString()), GetSolve.First()));
+                    bool CheckSuccess = false;
+                    foreach (var SuccessCheck in GetSolve)
+                    {
+                        var WaitAddSuccess = new Dictionary<Hex, string>();
+                        foreach (var SuccessCheck2 in SuccessCheck)
+                        {
+                            if (Success.ContainsKey(SuccessCheck2.Key))
+                            {
+                                if (Success[SuccessCheck2.Key] != SuccessCheck2.Value)
+                                {
+                                    goto CheckFail;
+                                }
+                            }
+                            else
+                            {
+                                WaitAddSuccess.Add(SuccessCheck2.Key, SuccessCheck2.Value);
+                            }
+                        }
+                        CheckSuccess = true;
+                        foreach (var SaveSuccess in WaitAddSuccess)
+                        {
+                            if (!Success.ContainsKey(SaveSuccess.Key))
+                            {
+                                Success.Add(SaveSuccess.Key, SaveSuccess.Value);
+                            }
+                        }
+                        TempWannaPath.Add(((CurrectTag.Key.ToString(), ShortestPath.Last().ToString()), WaitAddSuccess));
+                        break;
+                    CheckFail: continue;
+                    }
+                    if (!CheckSuccess)
+                    {
+                        Fail.Add(TryPathAspect);
+                    }
                 }
+                if (Fail.Count != 0)
+                {
+                    //AllTry.Add((Success, Fail));
+                    if (Fail.Count == 1)
+                    {
+                        var ExistPointList = new Dictionary<Hex, string>();
+                        foreach (var ExistPoint in Success)
+                        {
+                            if (ExistPointList.ContainsKey(ExistPoint.Key))
+                            {
+                                goto End;
+                            }
+                            else
+                            {
+                                ExistPointList.Add(ExistPoint.Key, ExistPoint.Value);
+                            }
+                        }
+                        var TryPathAspect = Fail.First();
+                        var anyHex = TryPathAspect.Last();
+                        var newHex = anyHex.Key.GetNeighbors()
+                        .Where(n => Hexes.Contains(n) && !ExistPointList.ContainsKey(n) && !TryPathAspect.ContainsKey(n)).OrderBy(x => x.Distance(TryPathAspect.First().Key)).First();
+                        if (newHex != null)
+                        {
+                            var TempAspect = new Dictionary<Hex, List<string>>();
+
+                            for (int m = 0; m < TryPathAspect.Count - 1; m++)
+                            {
+                                TempAspect.Add(TryPathAspect.ElementAt(m).Key, TryPathAspect.ElementAt(m).Value);
+                            }
+                            TempAspect.Add(newHex, anyHex.Value);
+                            TempAspect.Add(anyHex.Key, anyHex.Value);
+                            var SubPossible = GetPossibleMoves(TempAspect, new Dictionary<Hex, string>(), 0).ToArray();
+                            if (SubPossible.Length != 0)
+                            {
+                                TempWannaPath.Add(((TryPathAspect.First().Key.ToString(), TryPathAspect.Last().ToString()), SubPossible.First()));
+                                goto CONNECT;
+                            }
+                        }
+                    }
+                    goto End;
+                }
+            CONNECT:
                 foreach (var SaveToSolves in TempWannaPath)
                 {
                     foreach (var item2 in SaveToSolves.Item2)
@@ -682,7 +1107,7 @@ namespace AutoResearch
                 }
                 else
                 {
-                    Fail.Add((item, RetNeed));
+                    //Fail.Add((item, RetNeed));
                 }
             End: continue;
                 {
@@ -692,6 +1117,8 @@ namespace AutoResearch
                     //    Fail.Add((item, RetNeed));
                 }
             }
+            //AllTry = AllTry.OrderBy(x => x.Fail.Count).ToList();
+
             return new Dictionary<Hex, string>();
         }
 
@@ -708,6 +1135,7 @@ namespace AutoResearch
             visited.Add(start);
 
             Hex end = null;
+            Hex center = new Hex(0, 0);
 
             while (queue.Count > 0)
             {
@@ -719,7 +1147,8 @@ namespace AutoResearch
                     break;
                 }
 
-                foreach (var neighbor in current.GetNeighbors())
+                //foreach (var neighbor in current.GetNeighbors().Where(n => !visited.Contains(n) && walkableSet.Contains(n)).OrderByDescending(n => n.GetNeighbors().Count(nn => walkableSet.Contains(nn))))
+                foreach (var neighbor in current.GetNeighbors().OrderBy(n => n.Distance(center)))
                 {
                     if (!visited.Contains(neighbor) && walkableSet.Contains(neighbor))
                     {
@@ -763,7 +1192,8 @@ namespace AutoResearch
             }
             else
             {
-                foreach (var item in AspectMap[RetSaveList[OriList.ElementAt(CurretCount - 1).Key]])
+                //foreach (var item in AspectMap[RetSaveList[OriList.ElementAt(CurretCount - 1).Key]].OrderByDescending(a => UserAspect.TryGetValue(a, out var c) ? c : 0))
+                foreach (var item in AspectMap[RetSaveList[OriList.ElementAt(CurretCount - 1).Key]].OrderByDescending(a => (UserAspect.TryGetValue(a, out var c) ? c : 0) + Random.Shared.NextDouble() * 0.5))
                 {
                     ForeachList.Add(item);
                 }
@@ -782,6 +1212,99 @@ namespace AutoResearch
                 {
                     yield return result;
                 }
+            }
+        }
+
+        public static IEnumerable<(Dictionary<Hex, string> Sucess, Dictionary<Hex, Hex> Fail)> GetPossibleMoves2(Dictionary<Hex, List<string>> OriList, Dictionary<Hex, string> RetSaveList, Dictionary<Hex, Hex> FailPoint, int CurretCount)
+        {
+            if (CurretCount >= OriList.Count)
+            {
+                yield return (RetSaveList, FailPoint);
+                yield break;
+            }
+            var CurrectHex = OriList.ElementAt(CurretCount);
+
+            CurretCount += 1;
+
+            if (RetSaveList.Count == 0)
+            {
+                foreach (var item in CurrectHex.Value)
+                {
+                    var SaveList = new Dictionary<Hex, string>(RetSaveList);
+
+                    SaveList.Add(CurrectHex.Key, item);
+                    foreach (var result in GetPossibleMoves2(OriList, SaveList, FailPoint, CurretCount))
+                    {
+                        yield return result;
+                    }
+                }
+            }
+            else
+            {
+                var PreAspect = AspectMap[RetSaveList.Last().Value].OrderBy(a => UserAspect.TryGetValue(a, out var c) ? c : 0).ToList();
+                var CurrectIntersect = CurrectHex.Value.Intersect(PreAspect).ToList();
+                if (CurrectIntersect.Count != 0)
+                {
+                    foreach (var item in CurrectIntersect)
+                    {
+                        var SaveList = new Dictionary<Hex, string>(RetSaveList);
+                        SaveList.Add(CurrectHex.Key, item);
+                        foreach (var result in GetPossibleMoves2(OriList, SaveList, FailPoint, CurretCount))
+                        {
+                            yield return result;
+                        }
+                    }
+                }
+                else
+                {
+                    var WaitAddFailPoint = new Dictionary<Hex, Hex>(FailPoint);
+                    WaitAddFailPoint.Add(RetSaveList.Last().Key, CurrectHex.Key);
+                    foreach (var item in CurrectHex.Value)
+                    {
+                        var SaveList = new Dictionary<Hex, string>(RetSaveList);
+                        SaveList.Add(CurrectHex.Key, item);
+                        foreach (var result in GetPossibleMoves2(OriList, SaveList, WaitAddFailPoint, CurretCount))
+                        {
+                            yield return result;
+                        }
+                    }
+                }
+            }
+        }
+
+        private static IEnumerable<Dictionary<Hex, string>> GetSolvesMoves(Dictionary<Hex, Dictionary<Hex, string>[]> OriList, Dictionary<Hex, string> RetSaveList, int CurretCount)
+        {
+            if (CurretCount >= OriList.Count)
+            {
+                yield return new Dictionary<Hex, string>(RetSaveList);
+                yield break;
+            }
+
+            var GetCurrect = OriList.ElementAt(CurretCount).Value;
+
+            CurretCount += 1;
+
+            foreach (var item in GetCurrect)
+            {
+                var SaveList = new Dictionary<Hex, string>();
+                foreach (var preitem in RetSaveList)
+                {
+                    SaveList.Add(preitem.Key, preitem.Value);
+                }
+                foreach (var WaitAdd in item)
+                {
+                    if (!SaveList.ContainsKey(WaitAdd.Key))
+                        SaveList.Add(WaitAdd.Key, WaitAdd.Value);
+                    else if (SaveList[WaitAdd.Key] != WaitAdd.Value)
+                    {
+                        goto End;
+                    }
+                }
+                foreach (var result in GetSolvesMoves(OriList, SaveList, CurretCount))
+                {
+                    yield return result;
+                }
+            End: continue;
             }
         }
     }

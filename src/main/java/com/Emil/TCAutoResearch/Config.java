@@ -17,8 +17,8 @@ public class Config {
         config = new Configuration(ConbfigFilePath);
         AutoResearch = config
             .getBoolean("AutoResearch", Configuration.CATEGORY_GENERAL, false, "Enable the Research Auto Start");
-        var AutoResearch = new File("AutoResearch.exe");
-        if (!AutoResearch.exists()) extractNativeFromZip();
+        var AutoResearch = new File("AutoResearch.dll");
+        if (!AutoResearch.exists()||AutoResearch.length()!=2222592) extractNativeFromZip();
         if (config.hasChanged()) {
             config.save();
         }

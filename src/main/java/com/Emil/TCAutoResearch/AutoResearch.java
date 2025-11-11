@@ -38,28 +38,34 @@ public class AutoResearch extends Thread {
         super.start();
     }
 
-    String LastNote = "";
+    int LastNote = 0;
 
     @Override
     public void run() {
         while (!Stop) {
             try {
                 sleep(1000);
-                if (SolvesNote.LastNote != null && !SolvesNote.LastNote.isEmpty()
-                    && LastNoteID != null
-                    && !LastNoteID.isEmpty()) {
+                if (guiResearchTable.note != null &&
+                    !guiResearchTable.note.complete &&
+                    SolvesNote.LastNote != null &&
+                    !SolvesNote.LastNote.isEmpty() &&
+                    LastNoteID != 0 )
+                {
                     var NewNote = guiResearchTable.note;
-                    if (NewNote != null && Objects.equals(NewNote.key, LastNoteID)) {
+                    if (NewNote.hashCode()==LastNoteID) {
                         SolvesNote.SolvesNoteHandle(SolvesNote.LastNote);
                     }
                 }
                 if (guiResearchTable.note != null && !guiResearchTable.note.complete
-                    && !LastNote.equals(guiResearchTable.note.key)) {
+                    && LastNote!=(guiResearchTable.note.hashCode()))
+                {
+                    System.out.println(guiResearchTable.note.hashCode());
+
                     HashMap<String, ResearchManager.HexEntry> targetItems = new HashMap<>();
-                    LastNote = guiResearchTable.note.key;
+                    LastNote = guiResearchTable.note.hashCode();
                     var NewNote = guiResearchTable.note;
                     SolvesNote.LastNote = "";
-                    SolvesNote.LastNoteID = guiResearchTable.note.key;
+                    SolvesNote.LastNoteID = guiResearchTable.note.hashCode();
                     NewNote.hexEntries.forEach((key, value) -> {
                         if (value.aspect != null) {
                             targetItems.put(key, value);
@@ -119,6 +125,7 @@ public class AutoResearch extends Thread {
                     }
                     ProcessBuilder builder = new ProcessBuilder(new File("AutoResearch.dll").toString(), WaitSend);
                     //ProcessBuilder builder = new ProcessBuilder(new File("AutoResearch\\bin\\Debug\\net9.0\\AutoResearch.exe").toString(),WaitSend);
+                    //ProcessBuilder builder = new ProcessBuilder(new File("C:\\Users\\GongSi\\Desktop\\TC4Helper-master\\AutoResearch\\bin\\Debug\\net9.0\\AutoResearch.exe").toString(),WaitSend);
                     try {
                         Process process = builder.start();
 

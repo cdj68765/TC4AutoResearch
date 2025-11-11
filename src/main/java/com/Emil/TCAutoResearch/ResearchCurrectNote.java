@@ -73,7 +73,7 @@ public class ResearchCurrectNote {
                 HashMap<String, ResearchManager.HexEntry> targetItems = new HashMap<>();
                 var NewNote = guiResearchTable.note;
                 SolvesNote.LastNote = "";
-                SolvesNote.LastNoteID = guiResearchTable.note.key;
+                SolvesNote.LastNoteID = guiResearchTable.note.hashCode();
                 NewNote.hexEntries.forEach((key, value) -> {
                     if (value.aspect != null) {
                         targetItems.put(key, value);
@@ -126,7 +126,7 @@ public class ResearchCurrectNote {
                     if (Entry.aspect != null) WaitSend += Path + ":" + Entry.aspect.getTag() + "&";
                     else WaitSend += Path + "&";
                 }
-                //ProcessBuilder builder = new ProcessBuilder(new File("AutoResearch\\bin\\Debug\\net9.0\\AutoResearch.exe").toString(),WaitSend);
+                //ProcessBuilder builder = new ProcessBuilder(new File("C:\\Users\\GongSi\\Desktop\\TC4Helper-master\\AutoResearch\\bin\\Debug\\net9.0\\AutoResearch.exe").toString(),WaitSend);
                 ProcessBuilder builder = new ProcessBuilder(new File("AutoResearch.dll").toString(), WaitSend);
                 try {
                     Process process = builder.start();

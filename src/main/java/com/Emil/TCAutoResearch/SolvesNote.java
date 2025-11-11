@@ -20,7 +20,7 @@ public class SolvesNote {
 
     static Aspect Unless;
     public static String LastNote;
-    public static String LastNoteID;
+    public static int LastNoteID;
 
     public static void SolvesNoteHandle(String Line) {
         SolvesNote.LastNote = Line;

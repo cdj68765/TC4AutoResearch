@@ -79,6 +79,7 @@ public abstract class GuiResearchTableMixin extends GuiContainer implements GuiR
         button3 = new GuiButtonExt(104, super.guiLeft - 80, super.guiTop + 255 / 2, 80, 25, "解锁当前笔记");
         button3.visible = !Config.AutoResearch;
         button4 = new GuiButtonExt(105, super.guiLeft - 80, super.guiTop + 255 / 2 + 25, 80, 25, "重新解锁上次笔记");
+        button4.visible = !Config.AutoResearch;
 
         this.buttonList.add(button2);
         this.buttonList.add(button3);
@@ -149,7 +150,7 @@ public abstract class GuiResearchTableMixin extends GuiContainer implements GuiR
             if (note != null) {
                 if (!note.isComplete()) {
                     if (SolvesNote.LastNote != null && !SolvesNote.LastNote.isEmpty()) {
-                        if (SolvesNote.LastNoteID.equals(note.key)) {
+                        if (SolvesNote.LastNoteID==note.hashCode()) {
                             SolvesNote.SolvesNoteHandle(SolvesNote.LastNote);
                         } else mc.thePlayer.addChatMessage(new ChatComponentText("笔记重新解锁失败,记录笔记不同"));
                     } else mc.thePlayer.addChatMessage(new ChatComponentText("笔记重新解锁失败,无上次解锁数据"));

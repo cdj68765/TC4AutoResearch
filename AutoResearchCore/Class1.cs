@@ -884,6 +884,41 @@ namespace AutoResearch
                         RetString.Append(item.Value);
                         RetString.Append("&");
                     }
+                    //Dictionary<string, int> AspectDic = new();
+                    //if (File.Exists("AspectTotal.txt"))
+                    //{
+                    //    var ReadAllAspect = File.ReadAllLines("AspectTotal.txt");
+                    //    foreach (var item in ReadAllAspect)
+                    //    {
+                    //        var SP = item.Split('|');
+                    //        if (SP.Length == 2)
+                    //        {
+                    //            if (int.TryParse(SP[1],out int Num))
+                    //            {
+                    //                AspectDic.Add(SP[0],Num);
+                    //            }
+                    //        }
+                    //    }
+                    //}
+                    //{
+                    //    foreach (var item in Solver)
+                    //    {
+                    //        if(AspectDic.ContainsKey(item.Value))
+                    //        {
+                    //            AspectDic[item.Value] += 1;
+                    //        }
+                    //        else
+                    //        {
+                    //            AspectDic.Add(item.Value,1);
+                    //        }
+                    //    }
+                    //    StringBuilder stringBuilder = new();
+                    //    foreach (var item in AspectDic.OrderByDescending(x=>x.Value))
+                    //    {
+                    //        stringBuilder.AppendLine($"{item.Key}|{item.Value}");
+                    //    }
+                    //    File.WriteAllText("AspectTotal.txt", stringBuilder.ToString());
+                    //}
                     Console.WriteLine(RetString.ToString());
                 }
                 else
@@ -1193,9 +1228,29 @@ namespace AutoResearch
             else
             {
                 //foreach (var item in AspectMap[RetSaveList[OriList.ElementAt(CurretCount - 1).Key]].OrderByDescending(a => UserAspect.TryGetValue(a, out var c) ? c : 0))
-                foreach (var item in AspectMap[RetSaveList[OriList.ElementAt(CurretCount - 1).Key]].OrderByDescending(a => (UserAspect.TryGetValue(a, out var c) ? c : 0) + Random.Shared.NextDouble() * 0.5))
+                //// 1. 获取获得当前坐标
+                //var outerKey = OriList.ElementAt(CurretCount - 1).Key;
+
+                //// 2. 获得当前坐标所对应的元素
+                //var retSaveKey = RetSaveList[outerKey];
+
+                //// 3. 获得元素所对应的下一级元素组合
+                //var aspectCollection = AspectMap[retSaveKey];
+
+                //// 4. 根据用户该值的数量加上随机偏移量排序
+                //var sortedCollection = aspectCollection.OrderByDescending(a =>
+                //{
+                //    // 尝试从 UserAspect 字典中获取值，如果不存在则使用 0
+                //    double userAspectValue = RetSaveList.ContainsValue(a)?-100: UserAspect.TryGetValue(a, out var c) ? c : 0;
+
+                //    // 生成随机数并加上用户特征值
+                //    return userAspectValue + Random.Shared.NextDouble() * 0.5;
+                //});
+                //foreach (var item in sortedCollection)
+                foreach (var item in AspectMap[RetSaveList[OriList.ElementAt(CurretCount - 1).Key]].OrderByDescending(a => (RetSaveList.ContainsValue(a) ? -100 : UserAspect.TryGetValue(a, out var c) ? c : 0) + Random.Shared.NextDouble() * 0.5))
                 {
                     ForeachList.Add(item);
+
                 }
             }
             CurretCount += 1;
